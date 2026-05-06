@@ -34,6 +34,16 @@ pip install -r requirements.txt
 python scripts/run_pipeline.py
 ```
 
+## Automated Pipeline
+
+The project is synced to GitHub and includes a GitHub Actions workflow that runs automatically:
+
+- **Schedule**: Daily at 9 AM UTC (adjustable in `.github/workflows/options_pipeline.yml`)
+- **Trigger**: Also supports manual runs via GitHub Actions UI
+- **Process**: Checks out code, installs dependencies, runs the pipeline, and commits updated signals back to the repository
+
+To modify the schedule, edit the `cron` expression in `.github/workflows/options_pipeline.yml`.
+
 ## Files
 
 - `src/options_signal_pipeline/pipeline.py`: core pipeline implementation
