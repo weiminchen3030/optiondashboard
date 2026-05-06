@@ -24,13 +24,41 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Run options signal pipeline
+    - name: Run day-0 signal generation
       run: python scripts/run_pipeline.py
 
-    - name: Commit and push results
+    - name: Run confirmation (next day)
+      run: python scripts/run_pipeline.py --confirm
+
+    - name: Generate report
+      run: |
+        python -c "
+        import sys
+        sys.path.insert(0, 'src')
+        from options_signal_pipeline.pipeline import load_signals
+        import json
+        from datetime import datetime
+        
+        # Load both day0 and confirmed signals
+        day0_signals = load_signals()
+        confirmed_signals = [s for s in day0_signals if s.get('signal_type') == 'confirmed']
+        
+        report = {
+            'date': datetime.now().strftime('%Y-%m-%d'),
+            'day0_signals_count': len([s for s in day0_signals if s.get('signal_type') == 'day0']),
+            'confirmed_signals_count': len(confirmed_signals),
+            'confirmed_signals': confirmed_signals
+        }
+        
+        with open('daily_report.json', 'w') as f:
+            json.dump(report, f, indent=2)
+        print('Report generated with', len(confirmed_signals), 'confirmed signals')
+        "
+
+    - name: Commit report
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add signals_day0.json
-        git commit -m "Update signals: $(date)" || echo "No changes to commit"
+        git add daily_report.json
+        git commit -m "Daily report: $(date)" || echo "No changes to commit"
         git push
