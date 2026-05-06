@@ -45,7 +45,7 @@ def run_confirmation():
         return
 
     confirmed = confirm_oi_changes(previous_signals)
-    save_signals(confirmed, path="signals_confirmed.json")
+    save_signals(confirmed, path="signals_confirmed.json", signal_type="confirmed")
     logger.info("Confirmation complete: %d confirmed signals", len(confirmed))
 
 

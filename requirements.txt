@@ -3,3 +3,4 @@ numpy>=1.26
 yfinance>=0.2.28
 requests>=2.31
 lxml>=4.9
+supabase>=2.3.0

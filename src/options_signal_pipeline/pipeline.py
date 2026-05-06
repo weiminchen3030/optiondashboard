@@ -8,6 +8,8 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 import requests
+from supabase import create_client, Client
+
 import yfinance as yf
 
 logger = logging.getLogger(__name__)
@@ -15,6 +17,14 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
 )
+
+# Supabase configuration
+SUPABASE_URL = "https://wrhnuveoxzqlasculwae.supabase.co"
+SUPABASE_KEY = "sb_publishable_uO2Tsv-uZmB0xcB83Wz4BA_KuCgPWmu"
+TABLE_NAME = "optionsignals"
+
+# Initialize Supabase client
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 ETF_TICKERS = ["XLK", "XLE", "SMH", "XLF", "XLY", "XLI", "XLP", "XLV", "XLB", "XLU"]
 
@@ -284,25 +294,67 @@ def compute_signals(symbol: str, etf_source: str, options_df: pd.DataFrame) -> O
     return signal
 
 
-def save_signals(signals: List[Dict], path: str = "signals_day0.json") -> None:
+def save_signals(signals: List[Dict], path: str = "signals_day0.json", signal_type: str = "day0") -> None:
     try:
-        logger.info("Saving %d signals to %s", len(signals), path)
-        with open(path, "w", encoding="utf-8") as handle:
-            json.dump(signals, handle, indent=2)
+        logger.info("Saving %d signals to Supabase table %s", len(signals), TABLE_NAME)
+        for signal in signals:
+            # Flatten the signal data for database insertion
+            record = {
+                "ticker": signal["ticker"],
+                "etf_source": signal.get("etf_source", ""),
+                "direction": signal["direction"],
+                "total_call_volume": signal.get("total_call_volume", 0),
+                "total_put_volume": signal.get("total_put_volume", 0),
+                "timestamp": signal["timestamp"],
+                "top_contracts": json.dumps(signal.get("top_contracts", [])),  # Store as JSON string
+                "signal_type": signal_type,  # day0 or confirmed
+                "confirmed_contracts": json.dumps(signal.get("confirmed_contracts", [])),
+                "average_oi_retention": signal.get("average_oi_retention", 0.0),
+                "confirmed_contract_count": signal.get("confirmed_contract_count", 0)
+            }
+            supabase.table(TABLE_NAME).insert(record).execute()
+        logger.info("Successfully saved signals to Supabase")
     except Exception as exc:
-        logger.exception("Failed to save signals: %s", exc)
+        logger.exception("Failed to save signals to Supabase: %s", exc)
+        # Fallback to local JSON file
+        try:
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(signals, handle, indent=2)
+            logger.info("Fallback: saved signals to %s", path)
+        except Exception as fallback_exc:
+            logger.exception("Fallback save also failed: %s", fallback_exc)
 
 
 def load_signals(path: str = "signals_day0.json") -> List[Dict]:
     try:
-        with open(path, "r", encoding="utf-8") as handle:
-            return json.load(handle)
-    except FileNotFoundError:
-        logger.warning("Signal file not found: %s", path)
-        return []
+        logger.info("Loading signals from Supabase table %s", TABLE_NAME)
+        response = supabase.table(TABLE_NAME).select("*").eq("signal_type", "day0").execute()
+        signals = []
+        for record in response.data:
+            signal = {
+                "ticker": record["ticker"],
+                "etf_source": record["etf_source"],
+                "direction": record["direction"],
+                "total_call_volume": record["total_call_volume"],
+                "total_put_volume": record["total_put_volume"],
+                "timestamp": record["timestamp"],
+                "top_contracts": json.loads(record["top_contracts"]) if record["top_contracts"] else []
+            }
+            signals.append(signal)
+        logger.info("Loaded %d signals from Supabase", len(signals))
+        return signals
     except Exception as exc:
-        logger.exception("Failed to load signals: %s", exc)
-        return []
+        logger.exception("Failed to load signals from Supabase: %s", exc)
+        # Fallback to local JSON file
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                return json.load(handle)
+        except FileNotFoundError:
+            logger.warning("Signal file not found: %s", path)
+            return []
+        except Exception as fallback_exc:
+            logger.exception("Fallback load also failed: %s", fallback_exc)
+            return []
 
 
 def confirm_oi_changes(signals: List[Dict]) -> List[Dict]:
