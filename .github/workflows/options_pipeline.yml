@@ -56,15 +56,18 @@ jobs:
         "
 
     - name: Send email report
+      env:
+        RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        RECIPIENT_EMAIL: j810717@gmail.com
+        REPORT_FILE: daily_report.json
+      run: python scripts/send_report.py
+
+    - name: Commit report to repository
       run: |
-        REPORT_CONTENT=$(cat daily_report.json)
-        curl -X POST https://api.resend.com/emails \
-          -H "Authorization: Bearer ${{ secrets.RESEND_API_KEY }}" \
-          -H "Content-Type: application/json" \
-          -d "{
-            \"from\": \"options-pipeline@yourdomain.com\",
-            \"to\": [\"j810717@gmail.com\"],
-            \"subject\": \"Daily Options Signal Report - $(date +%Y-%m-%d)\",
-            \"html\": \"<h2>Daily Options Signal Report</h2><pre>$REPORT_CONTENT</pre>\"
-          }"
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add daily_report.json
+        git commit -m "Daily report: $(date)" || echo "No changes to commit"
+        git push
+
 
